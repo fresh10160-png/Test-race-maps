@@ -29,6 +29,18 @@
   line-height: 1.5;
 }
 
+.checkered-strip {
+  height: 10px;
+  margin-top: 16px;
+  border-radius: 4px;
+  background-image: repeating-conic-gradient(
+      #e5e7eb 0% 25%,
+      #111827 0% 50%
+    );
+  background-size: 10px 10px;
+  opacity: 0.9;
+}
+
 .record-panel {
   display: flex;
   flex-direction: column;
@@ -129,8 +141,8 @@
 }
 
 .tool-btn.active {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.15);
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.15);
 }
 
 .tool-btn:disabled {
@@ -230,7 +242,7 @@
   padding: 10px 14px;
   border-radius: 8px;
   border: none;
-  background: #3b82f6;
+  background: #f97316;
   color: white;
   font-size: 13px;
   font-weight: 600;
@@ -278,8 +290,8 @@
 }
 
 .tracks-list li.active .track-item {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.12);
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.12);
 }
 
 .track-item {

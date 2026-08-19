@@ -4,7 +4,7 @@ Web aplikacija poput Google Maps-a, namenjena obeležavanju "race" staza: postav
 
 ## Funkcionalnosti
 
-- Interaktivna mapa (Leaflet + OpenStreetMap, bez potrebe za API ključem)
+- Interaktivna mapa sa pravim ulicama (Leaflet + OpenStreetMap podaci, tamna "race" tema, bez potrebe za API ključem)
 - A/B tagovanje: postavi tačku starta (A) i cilja (B) klikom na mapu
 - Dodavanje dodatnih tačaka da se oblikuje realna trasa staze
 - Prevlačenje (drag) A/B markera radi finog podešavanja pozicije
@@ -66,3 +66,12 @@ Kad god promeniš `src/`, ponovo sinhronizuj native projekte:
 ```bash
 npm run cap:sync
 ```
+
+### 📦 Preuzimanje gotovog APK-a
+
+Android SDK build alati zahtevaju pristup Google-ovim serverima koji nije dostupan u nekim izolovanim razvojnim okruženjima, pa je build automatizovan preko GitHub Actions-a (`.github/workflows/android-apk.yml`) — svaki push na ovu granu ili `main` automatski build-uje `.apk`.
+
+Gotov APK preuzimaš ovde:
+
+1. Otvori **Actions** tab u repozitorijumu i sačekaj da workflow "Build Android APK" završi (zeleni ✓), ili
+2. Otvori **Releases** stranicu repozitorijuma (desno na GitHub-u) — svaki build objavljuje novi release (npr. `apk-12`) sa `.apk` fajlom kao prilogom, spremnim za direktno preuzimanje i instalaciju na telefon (uključi "Instaliraj iz nepoznatih izvora" u Android podešavanjima).

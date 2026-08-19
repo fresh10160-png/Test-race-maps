@@ -225,6 +225,7 @@ export default function App() {
         <header className="sidebar-header">
           <h1>🏁 Race Maps</h1>
           <p>Obeleži start (A) i cilj (B) svoje staze, po želji dodaj tačke da oblikuješ trasu, pa je sačuvaj.</p>
+          <div className="checkered-strip" />
         </header>
 
         <section className="record-panel">

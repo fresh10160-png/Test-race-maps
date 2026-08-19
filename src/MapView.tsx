@@ -96,8 +96,10 @@ export default function MapView({
       className={`map-root mode-${mode}`}
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> saradnici'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> saradnici &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        subdomains="abcd"
+        maxZoom={20}
       />
       <MapClicks mode={mode} onMapClick={onMapClick} />
       {myLocation && <FlyToLocation point={myLocation} requestId={flyToRequestId} />}
@@ -105,7 +107,7 @@ export default function MapView({
       {fullPath.length > 1 && (
         <Polyline
           positions={fullPath.map((p) => [p.lat, p.lng])}
-          pathOptions={{ color: '#2563eb', weight: 4, opacity: 0.85 }}
+          pathOptions={{ color: '#f97316', weight: 5, opacity: 0.9 }}
         />
       )}
 
@@ -129,7 +131,7 @@ export default function MapView({
           center={[wp.lat, wp.lng]}
           radius={6}
           pathOptions={{
-            color: '#2563eb',
+            color: '#f97316',
             fillColor: '#ffffff',
             fillOpacity: 1,
             weight: 2,
