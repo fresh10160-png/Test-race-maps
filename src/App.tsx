@@ -7,12 +7,20 @@ import {
   getCurrentPoint,
   watchPoint,
 } from './geolocation'
+import { fetchRoute, type RouteProfile } from './routing'
 import { loadTracks, saveTracks } from './storage'
 import type { EditMode, LatLngPoint, SavedTrack } from './types'
 import './app.css'
 
 const MIN_RECORD_DISTANCE_M = 8
+const ROUTE_DEBOUNCE_MS = 500
 const MOBILE_QUERY = '(max-width: 720px)'
+
+const PROFILE_OPTIONS: { id: RouteProfile; label: string; icon: string }[] = [
+  { id: 'driving', label: 'Drive', icon: '🚗' },
+  { id: 'cycling', label: 'Bike', icon: '🚴' },
+  { id: 'walking', label: 'Walk', icon: '🚶' },
+]
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -43,6 +51,12 @@ export default function App() {
   const [panelExpanded, setPanelExpanded] = useState(
     () => typeof window === 'undefined' || !window.matchMedia(MOBILE_QUERY).matches,
   )
+  const [profile, setProfile] = useState<RouteProfile>('driving')
+  const [recordedTrack, setRecordedTrack] = useState(false)
+  const [routedPath, setRoutedPath] = useState<LatLngPoint[] | null>(null)
+  const [routedDistance, setRoutedDistance] = useState<number | null>(null)
+  const [routing, setRouting] = useState(false)
+  const [routeError, setRouteError] = useState<string | null>(null)
   const watchIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -67,7 +81,49 @@ export default function App() {
     return pathDistance(pts)
   }, [a, b, waypoints])
 
+  const canRoute = a !== null && b !== null && !recording && !recordedTrack
+
+  useEffect(() => {
+    if (!canRoute) return
+
+    const points: LatLngPoint[] = [a as LatLngPoint, ...waypoints, b as LatLngPoint]
+    const controller = new AbortController()
+
+    const timer = setTimeout(async () => {
+      setRouting(true)
+      setRouteError(null)
+      try {
+        const result = await fetchRoute(points, profile, controller.signal)
+        if (result) {
+          setRoutedPath(result.coordinates)
+          setRoutedDistance(result.distanceMeters)
+        } else {
+          setRoutedPath(null)
+          setRoutedDistance(null)
+          setRouteError("Couldn't find a route on the roads — showing a straight line.")
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setRoutedPath(null)
+          setRoutedDistance(null)
+          setRouteError("Couldn't reach the routing service — showing a straight line.")
+        }
+      } finally {
+        setRouting(false)
+      }
+    }, ROUTE_DEBOUNCE_MS)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [a, b, waypoints, profile, canRoute])
+
+  const routedPathForDisplay = canRoute ? routedPath : null
+  const displayDistanceMeters = canRoute && routedDistance !== null ? routedDistance : distanceMeters
+
   function handleMapClick(p: LatLngPoint) {
+    setRecordedTrack(false)
     if (mode === 'a') {
       setA(p)
       setMode(b ? 'idle' : 'b')
@@ -80,7 +136,18 @@ export default function App() {
   }
 
   function handleRemoveWaypoint(index: number) {
+    setRecordedTrack(false)
     setWaypoints((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function handleMoveA(p: LatLngPoint) {
+    setRecordedTrack(false)
+    setA(p)
+  }
+
+  function handleMoveB(p: LatLngPoint) {
+    setRecordedTrack(false)
+    setB(p)
   }
 
   function handleClearTrack() {
@@ -89,6 +156,11 @@ export default function App() {
     setWaypoints([])
     setTrackName('')
     setActiveTrackId(null)
+    setRecordedTrack(false)
+    setRoutedPath(null)
+    setRoutedDistance(null)
+    setRouteError(null)
+    setRouting(false)
     setMode('a')
   }
 
@@ -107,8 +179,11 @@ export default function App() {
       a,
       b,
       waypoints,
-      distanceMeters,
+      distanceMeters: displayDistanceMeters,
       createdAt: Date.now(),
+      profile,
+      recorded: recordedTrack,
+      routeCoordinates: routedPath ?? undefined,
     }
 
     setTracks((prev) => {
@@ -129,6 +204,12 @@ export default function App() {
     setWaypoints(track.waypoints)
     setTrackName(track.name)
     setActiveTrackId(track.id)
+    setProfile(track.profile ?? 'driving')
+    setRecordedTrack(track.recorded ?? false)
+    setRoutedPath(track.routeCoordinates ?? null)
+    setRoutedDistance(track.routeCoordinates ? track.distanceMeters : null)
+    setRouteError(null)
+    setRouting(false)
     setMode('idle')
   }
 
@@ -178,6 +259,7 @@ export default function App() {
       setFlyToRequestId((n) => n + 1)
       setMode('idle')
       setRecording(true)
+      setRecordedTrack(true)
       setRecordingStartedAt(Date.now())
 
       const id = await watchPoint(
@@ -290,6 +372,20 @@ export default function App() {
             </button>
           </section>
 
+          <section className="profile-row">
+            {PROFILE_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`profile-btn ${profile === opt.id ? 'active' : ''}`}
+                onClick={() => setProfile(opt.id)}
+                disabled={recording}
+              >
+                {opt.icon} {opt.label}
+              </button>
+            ))}
+          </section>
+
           <section className="status-panel">
             <div className="status-row">
               <span className={`dot ${a ? 'set' : ''}`} />
@@ -300,8 +396,17 @@ export default function App() {
               Finish (B): {b ? `${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}` : 'not set'}
             </div>
             <div className="status-row">
-              📏 Track length: <strong className="stat-readout">{formatDistance(distanceMeters)}</strong>
+              📏 Track length: <strong className="stat-readout">{formatDistance(displayDistanceMeters)}</strong>
             </div>
+            {!recording && !recordedTrack && routing && (
+              <div className="status-row muted">🔄 Finding route on the roads…</div>
+            )}
+            {!recording && !recordedTrack && routeError && (
+              <div className="status-row muted">{routeError}</div>
+            )}
+            {recordedTrack && !recording && (
+              <div className="status-row muted">📡 Recorded from GPS — showing the actual path ridden</div>
+            )}
             {waypoints.length > 0 && (
               <div className="status-row muted">
                 {waypoints.length} extra point{waypoints.length === 1 ? '' : 's'}
@@ -367,11 +472,12 @@ export default function App() {
           a={a}
           b={b}
           waypoints={waypoints}
+          routeLine={routedPathForDisplay}
           myLocation={myLocation}
           flyToRequestId={flyToRequestId}
           onMapClick={handleMapClick}
-          onMoveA={setA}
-          onMoveB={setB}
+          onMoveA={handleMoveA}
+          onMoveB={handleMoveB}
           onRemoveWaypoint={handleRemoveWaypoint}
         />
         <div className="map-hint">

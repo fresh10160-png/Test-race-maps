@@ -186,6 +186,38 @@
   cursor: not-allowed;
 }
 
+.profile-row {
+  display: flex;
+  gap: 8px;
+}
+
+.profile-btn {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid #2d3341;
+  background: #1a2029;
+  color: #d1d5db;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.profile-btn:hover {
+  background: #232a36;
+}
+
+.profile-btn.active {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.15);
+  color: #ffffff;
+}
+
+.profile-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .status-panel {
   display: flex;
   flex-direction: column;

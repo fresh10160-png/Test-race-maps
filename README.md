@@ -6,6 +6,7 @@ A Google Maps-style app built for tagging "race" tracks: set a start (A) and fin
 
 - Interactive map with real streets (Leaflet + OpenStreetMap data, dark "race" theme, no API key needed)
 - A/B tagging: set the start (A) and finish (B) point with a tap on the map
+- Manually placed routes automatically snap to real roads/paths (via OSRM routing), with a driving/cycling/walking profile picker
 - Add extra points to shape the route along the actual track
 - Drag the A/B markers to fine-tune their position
 - Automatically calculated track length

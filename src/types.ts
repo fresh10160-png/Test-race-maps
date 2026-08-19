@@ -11,6 +11,9 @@ export interface SavedTrack {
   waypoints: LatLngPoint[]
   distanceMeters: number
   createdAt: number
+  profile?: 'driving' | 'cycling' | 'walking'
+  recorded?: boolean
+  routeCoordinates?: LatLngPoint[]
 }
 
 export type EditMode = 'idle' | 'a' | 'b' | 'waypoint'

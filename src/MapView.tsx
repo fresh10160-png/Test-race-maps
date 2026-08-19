@@ -61,6 +61,7 @@ interface MapViewProps {
   a: LatLngPoint | null
   b: LatLngPoint | null
   waypoints: LatLngPoint[]
+  routeLine: LatLngPoint[] | null
   myLocation: LatLngPoint | null
   flyToRequestId: number
   onMapClick: (p: LatLngPoint) => void
@@ -74,6 +75,7 @@ export default function MapView({
   a,
   b,
   waypoints,
+  routeLine,
   myLocation,
   flyToRequestId,
   onMapClick,
@@ -88,6 +90,8 @@ export default function MapView({
     if (b) pts.push(b)
     return pts
   }, [a, b, waypoints])
+
+  const lineToDraw = routeLine && routeLine.length > 1 ? routeLine : fullPath
 
   return (
     <MapContainer
@@ -104,9 +108,9 @@ export default function MapView({
       <MapClicks mode={mode} onMapClick={onMapClick} />
       {myLocation && <FlyToLocation point={myLocation} requestId={flyToRequestId} />}
 
-      {fullPath.length > 1 && (
+      {lineToDraw.length > 1 && (
         <Polyline
-          positions={fullPath.map((p) => [p.lat, p.lng])}
+          positions={lineToDraw.map((p) => [p.lat, p.lng])}
           pathOptions={{ color: '#f97316', weight: 5, opacity: 0.9 }}
         />
       )}
