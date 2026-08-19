@@ -23,3 +23,35 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## Mobilna app (Android / iOS)
+
+Projekat je obučen u [Capacitor](https://capacitorjs.com/) — isti web kod se pakuje u pravu native Android/iOS aplikaciju (`android/` i `ios/` folderi).
+
+### Android
+
+Potreban je [Android Studio](https://developer.android.com/studio) (skida Android SDK sam).
+
+```bash
+npm run android:open
+```
+
+Ovo build-uje web app i otvara `android/` projekat u Android Studio-u. Tamo klikni **Run** da instaliraš app na povezan telefon/emulator, ili **Build > Build APK(s)** da dobiješ `.apk` fajl za instalaciju.
+
+### iOS
+
+Potreban je Mac sa [Xcode](https://developer.apple.com/xcode/).
+
+```bash
+npm run ios:open
+```
+
+Otvara `ios/` projekat u Xcode-u. Odatle se pokreće na simulatoru ili povezanom iPhone-u (za instalaciju na pravi uređaj/App Store potreban je Apple Developer nalog).
+
+### Nakon izmena u web kodu
+
+Kad god promeniš `src/`, ponovo sinhronizuj native projekte:
+
+```bash
+npm run cap:sync
+```
