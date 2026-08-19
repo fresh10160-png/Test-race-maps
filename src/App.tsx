@@ -105,6 +105,7 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now())
   const [myLocation, setMyLocation] = useState<LatLngPoint | null>(null)
   const [flyToRequestId, setFlyToRequestId] = useState(0)
+  const [initialLocation, setInitialLocation] = useState<LatLngPoint | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [panelExpanded, setPanelExpanded] = useState(
     () => typeof window === 'undefined' || !window.matchMedia(MOBILE_QUERY).matches,
@@ -140,6 +141,22 @@ export default function App() {
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [busy])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const granted = await ensureLocationPermission().catch(() => false)
+      if (!granted || cancelled) return
+      const point = await getCurrentPoint().catch(() => null)
+      if (point && !cancelled) {
+        setMyLocation(point)
+        setInitialLocation(point)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -845,6 +862,7 @@ export default function App() {
           routeLine={routedPathForDisplay}
           myLocation={myLocation}
           flyToRequestId={flyToRequestId}
+          initialLocation={initialLocation}
           locked={busy}
           onMapClick={handleMapClick}
           onMoveA={handleMoveA}

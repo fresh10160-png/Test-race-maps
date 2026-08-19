@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   MapContainer,
   TileLayer,
@@ -11,7 +11,10 @@ import {
 import L from 'leaflet'
 import type { EditMode, LatLngPoint } from './types'
 
-const BELGRADE: LatLngPoint = { lat: 44.8125, lng: 20.4612 }
+// Neutral fallback shown only until the user's real location resolves (or
+// forever if they deny location access) — never a specific city.
+const FALLBACK_CENTER: LatLngPoint = { lat: 20, lng: 10 }
+const FALLBACK_ZOOM = 2
 
 function tagIcon(label: string, color: string) {
   return L.divIcon({
@@ -56,6 +59,17 @@ function FlyToLocation({ point, requestId }: FlyToProps) {
   return null
 }
 
+function SetInitialView({ point }: { point: LatLngPoint }) {
+  const map = useMap()
+  const appliedRef = useRef(false)
+  useEffect(() => {
+    if (appliedRef.current) return
+    appliedRef.current = true
+    map.setView([point.lat, point.lng], 14)
+  }, [point, map])
+  return null
+}
+
 interface MapViewProps {
   mode: EditMode
   a: LatLngPoint | null
@@ -64,6 +78,7 @@ interface MapViewProps {
   routeLine: LatLngPoint[] | null
   myLocation: LatLngPoint | null
   flyToRequestId: number
+  initialLocation: LatLngPoint | null
   locked: boolean
   onMapClick: (p: LatLngPoint) => void
   onMoveA: (p: LatLngPoint) => void
@@ -79,6 +94,7 @@ export default function MapView({
   routeLine,
   myLocation,
   flyToRequestId,
+  initialLocation,
   locked,
   onMapClick,
   onMoveA,
@@ -97,8 +113,8 @@ export default function MapView({
 
   return (
     <MapContainer
-      center={[BELGRADE.lat, BELGRADE.lng]}
-      zoom={13}
+      center={[FALLBACK_CENTER.lat, FALLBACK_CENTER.lng]}
+      zoom={FALLBACK_ZOOM}
       className={`map-root mode-${mode}`}
     >
       <TileLayer
@@ -109,6 +125,7 @@ export default function MapView({
       />
       <MapClicks mode={mode} onMapClick={onMapClick} />
       {myLocation && <FlyToLocation point={myLocation} requestId={flyToRequestId} />}
+      {initialLocation && <SetInitialView point={initialLocation} />}
 
       {lineToDraw.length > 1 && (
         <>
