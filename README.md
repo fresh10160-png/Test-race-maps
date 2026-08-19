@@ -4,7 +4,7 @@ A Google Maps-style app built for tagging "race" tracks: set a start (A) and fin
 
 ## Features
 
-- Interactive map with real streets (Leaflet + OpenStreetMap data, dark "race" theme, no API key needed)
+- Interactive map with real streets (Leaflet + OpenStreetMap data, light Google Maps-style "race" theme, no API key needed)
 - A/B tagging: set the start (A) and finish (B) point with a tap on the map
 - Manually placed routes automatically snap to real roads/paths (via OSRM routing), with a driving/cycling/walking profile picker
 - Add extra points to shape the route along the actual track
@@ -13,7 +13,8 @@ A Google Maps-style app built for tagging "race" tracks: set a start (A) and fin
 - Save tracks locally (localStorage) with a name; load and delete saved tracks
 - 📍 "My location" button — centers the map on your current position
 - 🔴 Live ride recording — tap "start", GPS follows your ride and automatically adds route points, tap "stop" and A/B/route are set automatically
-- 📊 Race telemetry — live speed and G-force while recording, plus a session summary (time, avg/max speed, peak G) saved with the track; manually placed routes show an estimated travel time instead
+- 📊 Race telemetry — live speed and G-force while recording, plus a session summary (time, avg/max speed, peak G) saved with the track; manually placed routes show an estimated travel time instead (classic h:mm:ss format)
+- 🏁 Lap timer — once a track is saved, hit "Start Lap" to actually drive/ride it with a live stopwatch, speed, and G-force; the lap auto-finishes when you reach the finish point (or stop it manually), and every lap is saved so you can chase your best time
 - Collapsible bottom-sheet panel on mobile, so the map takes the full screen like a real map app
 
 ## Run locally

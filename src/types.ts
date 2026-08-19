@@ -3,6 +3,15 @@ export interface LatLngPoint {
   lng: number
 }
 
+export interface LapRecord {
+  id: string
+  durationSeconds: number
+  avgSpeedKmh: number
+  maxSpeedKmh: number
+  maxGForce: number
+  completedAt: number
+}
+
 export interface SavedTrack {
   id: string
   name: string
@@ -18,6 +27,7 @@ export interface SavedTrack {
   avgSpeedKmh?: number
   maxSpeedKmh?: number
   maxGForce?: number
+  laps?: LapRecord[]
 }
 
 export type EditMode = 'idle' | 'a' | 'b' | 'waypoint'

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { PluginListenerHandle } from '@capacitor/core'
 import MapView from './MapView'
 import { formatDistance, haversineDistance, pathDistance } from './geo'
@@ -12,13 +12,15 @@ import {
 import { watchGForce } from './motion'
 import { fetchRoute, type RouteProfile } from './routing'
 import { loadTracks, saveTracks } from './storage'
-import type { EditMode, LatLngPoint, SavedTrack } from './types'
+import type { EditMode, LapRecord, LatLngPoint, SavedTrack } from './types'
 import './app.css'
 
 const MIN_RECORD_DISTANCE_M = 8
 const ROUTE_DEBOUNCE_MS = 500
 const MOBILE_QUERY = '(max-width: 720px)'
 const MAX_PLAUSIBLE_SPEED_KMH = 400
+const LAP_FINISH_RADIUS_M = 25
+const MIN_LAP_SECONDS = 15
 
 const PROFILE_OPTIONS: { id: RouteProfile; label: string; icon: string }[] = [
   { id: 'driving', label: 'Drive', icon: '🚗' },
@@ -30,15 +32,36 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function formatSeconds(totalSecondsInput: number): string {
-  const totalSeconds = Math.max(0, Math.floor(totalSecondsInput))
-  const minutes = Math.floor(totalSeconds / 60)
+type LastSample = { point: LatLngPoint; timestamp: number }
+
+function computeSpeedKmh(sample: GeoSample, lastSampleRef: MutableRefObject<LastSample | null>): number | null {
+  let speedKmh: number | null =
+    sample.speedMps !== null && sample.speedMps >= 0 ? sample.speedMps * 3.6 : null
+  const prevSample = lastSampleRef.current
+  if (speedKmh === null && prevSample) {
+    const dtSeconds = (sample.timestamp - prevSample.timestamp) / 1000
+    if (dtSeconds > 0) {
+      const dMeters = haversineDistance(prevSample.point, sample.point)
+      speedKmh = (dMeters / dtSeconds) * 3.6
+    }
+  }
+  lastSampleRef.current = { point: sample.point, timestamp: sample.timestamp }
+  return speedKmh
+}
+
+function formatDuration(totalSecondsInput: number): string {
+  const totalSeconds = Math.max(0, Math.round(totalSecondsInput))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+  }
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
 function formatElapsed(ms: number): string {
-  return formatSeconds(ms / 1000)
+  return formatDuration(ms / 1000)
 }
 
 function formatSpeed(kmh: number): string {
@@ -47,6 +70,23 @@ function formatSpeed(kmh: number): string {
 
 function formatGForce(g: number): string {
   return `${g.toFixed(2)} g`
+}
+
+function TelemetryTiles({ speedKmh, gForce }: { speedKmh: number | null; gForce: number | null }) {
+  return (
+    <div className="telemetry-row">
+      <div className="telemetry-tile">
+        <span className="telemetry-label">Speed</span>
+        <span className="telemetry-value stat-readout">
+          {speedKmh !== null ? formatSpeed(speedKmh) : '—'}
+        </span>
+      </div>
+      <div className="telemetry-tile">
+        <span className="telemetry-label">G-force</span>
+        <span className="telemetry-value stat-readout">{gForce !== null ? formatGForce(gForce) : '—'}</span>
+      </div>
+    </div>
+  )
 }
 
 export default function App() {
@@ -80,15 +120,22 @@ export default function App() {
   const [sessionAvgSpeedKmh, setSessionAvgSpeedKmh] = useState<number | null>(null)
   const [sessionMaxSpeedKmh, setSessionMaxSpeedKmh] = useState<number | null>(null)
   const [sessionMaxGForce, setSessionMaxGForce] = useState<number | null>(null)
+  const [lapRunning, setLapRunning] = useState(false)
+  const [lapStartedAt, setLapStartedAt] = useState<number | null>(null)
   const watchIdRef = useRef<string | null>(null)
   const motionHandleRef = useRef<PluginListenerHandle | null>(null)
-  const lastSampleRef = useRef<{ point: LatLngPoint; timestamp: number } | null>(null)
+  const lastSampleRef = useRef<LastSample | null>(null)
+  const maxSpeedRef = useRef(0)
+  const maxGForceRef = useRef(0)
+  const finishLapRef = useRef<(() => void) | null>(null)
+
+  const busy = recording || lapRunning
 
   useEffect(() => {
-    if (!recording) return
+    if (!busy) return
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [recording])
+  }, [busy])
 
   useEffect(() => {
     return () => {
@@ -109,7 +156,7 @@ export default function App() {
     return pathDistance(pts)
   }, [a, b, waypoints])
 
-  const canRoute = a !== null && b !== null && !recording && !recordedTrack
+  const canRoute = a !== null && b !== null && !busy && !recordedTrack
 
   useEffect(() => {
     if (!canRoute) return
@@ -150,10 +197,16 @@ export default function App() {
     }
   }, [a, b, waypoints, profile, canRoute])
 
-  const routedPathForDisplay = canRoute ? routedPath : null
-  const displayDistanceMeters = canRoute && routedDistance !== null ? routedDistance : distanceMeters
+  // Whether the last-fetched route still applies to the current a/b/waypoints.
+  // Unlike canRoute (which also gates *fetching* a new route), this stays true
+  // while busy so a locked-in route keeps showing its real distance/time
+  // during an active recording or lap instead of falling back to a straight line.
+  const routeIsCurrent = a !== null && b !== null && !recordedTrack
+  const routedPathForDisplay = routeIsCurrent ? routedPath : null
+  const displayDistanceMeters = routeIsCurrent && routedDistance !== null ? routedDistance : distanceMeters
 
   function handleMapClick(p: LatLngPoint) {
+    if (busy) return
     setRecordedTrack(false)
     if (mode === 'a') {
       setA(p)
@@ -199,6 +252,9 @@ export default function App() {
     setSessionMaxGForce(null)
     setLiveSpeedKmh(null)
     setLiveGForce(null)
+    setLapRunning(false)
+    setLapStartedAt(null)
+    finishLapRef.current = null
     setMode('a')
   }
 
@@ -226,6 +282,7 @@ export default function App() {
       avgSpeedKmh: sessionAvgSpeedKmh ?? undefined,
       maxSpeedKmh: sessionMaxSpeedKmh ?? undefined,
       maxGForce: sessionMaxGForce ?? undefined,
+      laps: activeTrackId ? tracks.find((t) => t.id === activeTrackId)?.laps : undefined,
     }
 
     setTracks((prev) => {
@@ -291,7 +348,7 @@ export default function App() {
   }
 
   async function handleStartRecording() {
-    if (recording) return
+    if (busy) return
     setLocationError(null)
     const granted = await ensureLocationPermission()
     if (!granted) {
@@ -317,6 +374,8 @@ export default function App() {
       setSessionAvgSpeedKmh(null)
       setSessionMaxSpeedKmh(null)
       setSessionMaxGForce(null)
+      maxSpeedRef.current = 0
+      maxGForceRef.current = 0
       lastSampleRef.current = { point: start, timestamp: Date.now() }
 
       const id = await watchPoint(
@@ -324,21 +383,11 @@ export default function App() {
           setLocationError(null)
           setMyLocation(sample.point)
 
-          let speedKmh: number | null =
-            sample.speedMps !== null && sample.speedMps >= 0 ? sample.speedMps * 3.6 : null
-          const prevSample = lastSampleRef.current
-          if (speedKmh === null && prevSample) {
-            const dtSeconds = (sample.timestamp - prevSample.timestamp) / 1000
-            if (dtSeconds > 0) {
-              const dMeters = haversineDistance(prevSample.point, sample.point)
-              speedKmh = (dMeters / dtSeconds) * 3.6
-            }
-          }
-          lastSampleRef.current = { point: sample.point, timestamp: sample.timestamp }
-
+          const speedKmh = computeSpeedKmh(sample, lastSampleRef)
           if (speedKmh !== null && speedKmh <= MAX_PLAUSIBLE_SPEED_KMH) {
             setLiveSpeedKmh(speedKmh)
-            setSessionMaxSpeedKmh((prev) => Math.max(prev ?? 0, speedKmh as number))
+            maxSpeedRef.current = Math.max(maxSpeedRef.current, speedKmh)
+            setSessionMaxSpeedKmh(maxSpeedRef.current)
           }
 
           setWaypoints((prev) => {
@@ -353,7 +402,8 @@ export default function App() {
 
       motionHandleRef.current = await watchGForce((g) => {
         setLiveGForce(g)
-        setSessionMaxGForce((prev) => Math.max(prev ?? 0, g))
+        maxGForceRef.current = Math.max(maxGForceRef.current, g)
+        setSessionMaxGForce(maxGForceRef.current)
       })
     } catch {
       setLocationError('Could not get your location. Check that GPS is turned on.')
@@ -399,8 +449,117 @@ export default function App() {
     }
   }
 
+  async function handleStartLap() {
+    if (busy || !a || !b || !activeTrackId) return
+    setLocationError(null)
+    const granted = await ensureLocationPermission()
+    if (!granted) {
+      setLocationError('Location permission was not granted.')
+      return
+    }
+
+    const trackId = activeTrackId
+    const targetB = b
+    const lapDistance = displayDistanceMeters
+
+    try {
+      const startPoint = await getCurrentPoint()
+      const lapStart = Date.now()
+      setMode('idle')
+      setMyLocation(startPoint)
+      setFlyToRequestId((n) => n + 1)
+      setLapRunning(true)
+      setLapStartedAt(lapStart)
+      setLiveSpeedKmh(null)
+      setLiveGForce(null)
+      setSessionMaxSpeedKmh(null)
+      setSessionMaxGForce(null)
+      maxSpeedRef.current = 0
+      maxGForceRef.current = 0
+      lastSampleRef.current = { point: startPoint, timestamp: lapStart }
+
+      let finished = false
+      const finishLap = async () => {
+        if (finished) return
+        finished = true
+        finishLapRef.current = null
+        setLapRunning(false)
+        setLapStartedAt(null)
+        setLiveSpeedKmh(null)
+        setLiveGForce(null)
+        if (watchIdRef.current) {
+          await clearPointWatch(watchIdRef.current)
+          watchIdRef.current = null
+        }
+        if (motionHandleRef.current) {
+          await motionHandleRef.current.remove()
+          motionHandleRef.current = null
+        }
+
+        const durationSeconds = (Date.now() - lapStart) / 1000
+        const avgSpeedKmh = durationSeconds > 0 ? (lapDistance / durationSeconds) * 3.6 : 0
+        const lap: LapRecord = {
+          id: makeId(),
+          durationSeconds,
+          avgSpeedKmh,
+          maxSpeedKmh: maxSpeedRef.current,
+          maxGForce: maxGForceRef.current,
+          completedAt: Date.now(),
+        }
+
+        setTracks((prev) => {
+          const next = prev.map((t) => (t.id === trackId ? { ...t, laps: [lap, ...(t.laps ?? [])] } : t))
+          saveTracks(next)
+          return next
+        })
+      }
+
+      const id = await watchPoint(
+        (sample: GeoSample) => {
+          setLocationError(null)
+          setMyLocation(sample.point)
+
+          const speedKmh = computeSpeedKmh(sample, lastSampleRef)
+          if (speedKmh !== null && speedKmh <= MAX_PLAUSIBLE_SPEED_KMH) {
+            setLiveSpeedKmh(speedKmh)
+            maxSpeedRef.current = Math.max(maxSpeedRef.current, speedKmh)
+            setSessionMaxSpeedKmh(maxSpeedRef.current)
+          }
+
+          const elapsedSoFar = (sample.timestamp - lapStart) / 1000
+          const distToFinish = haversineDistance(sample.point, targetB)
+          if (elapsedSoFar > MIN_LAP_SECONDS && distToFinish < LAP_FINISH_RADIUS_M) {
+            finishLap()
+          }
+        },
+        () => setLocationError('Error while tracking your location.'),
+      )
+      watchIdRef.current = id
+
+      motionHandleRef.current = await watchGForce((g) => {
+        setLiveGForce(g)
+        maxGForceRef.current = Math.max(maxGForceRef.current, g)
+        setSessionMaxGForce(maxGForceRef.current)
+      })
+
+      finishLapRef.current = finishLap
+    } catch {
+      setLocationError('Could not get your location. Check that GPS is turned on.')
+      setLapRunning(false)
+      setLapStartedAt(null)
+    }
+  }
+
   const canSave = a !== null && b !== null
+  const canStartLap = a !== null && b !== null && activeTrackId !== null && !busy
+  const activeTrack = tracks.find((t) => t.id === activeTrackId) ?? null
+  const lapCount = activeTrack?.laps?.length ?? 0
+  const bestLapSeconds =
+    activeTrack?.laps && activeTrack.laps.length > 0
+      ? Math.min(...activeTrack.laps.map((l) => l.durationSeconds))
+      : null
   const elapsedMs = recordingStartedAt ? now - recordingStartedAt : 0
+  const lapElapsedMs = lapStartedAt ? now - lapStartedAt : 0
 
   return (
     <div className="app-shell">
@@ -417,16 +576,18 @@ export default function App() {
 
         <div className="sidebar-body">
           <p className="sidebar-subtitle">
-            Tag your track's start (A) and finish (B), optionally shape the route, then save it.
+            Create a track — start (A), finish (B), shape the route — save it, then start a lap to
+            time yourself with live speed and G-force.
           </p>
           <div className="checkered-strip" />
 
           <section className="record-panel">
-            {!recording ? (
+            {!recording && !lapRunning && (
               <button type="button" className="record-btn" onClick={handleStartRecording}>
                 🔴 Record a live ride
               </button>
-            ) : (
+            )}
+            {recording && (
               <div className="recording-active">
                 <button type="button" className="record-btn recording" onClick={handleStopRecording}>
                   ⏹ Stop recording
@@ -437,23 +598,43 @@ export default function App() {
                     {formatElapsed(elapsedMs)} · {formatDistance(distanceMeters)}
                   </span>
                 </div>
-                <div className="telemetry-row">
-                  <div className="telemetry-tile">
-                    <span className="telemetry-label">Speed</span>
-                    <span className="telemetry-value stat-readout">
-                      {liveSpeedKmh !== null ? formatSpeed(liveSpeedKmh) : '—'}
-                    </span>
-                  </div>
-                  <div className="telemetry-tile">
-                    <span className="telemetry-label">G-force</span>
-                    <span className="telemetry-value stat-readout">
-                      {liveGForce !== null ? formatGForce(liveGForce) : '—'}
-                    </span>
-                  </div>
-                </div>
+                <TelemetryTiles speedKmh={liveSpeedKmh} gForce={liveGForce} />
               </div>
             )}
             {locationError && <div className="location-error">{locationError}</div>}
+          </section>
+
+          <section className="lap-panel">
+            {!busy && canStartLap && (
+              <button type="button" className="lap-btn" onClick={handleStartLap}>
+                🏁 Start Lap
+              </button>
+            )}
+            {!busy && a && b && !activeTrackId && (
+              <p className="lap-hint">💾 Save this track first to start timing laps.</p>
+            )}
+            {lapRunning && (
+              <div className="recording-active">
+                <button
+                  type="button"
+                  className="record-btn recording"
+                  onClick={() => finishLapRef.current?.()}
+                >
+                  🏁 Finish Lap
+                </button>
+                <div className="recording-stats">
+                  <span className="pulse-dot" />
+                  <span className="stat-readout">{formatElapsed(lapElapsedMs)}</span>
+                </div>
+                <TelemetryTiles speedKmh={liveSpeedKmh} gForce={liveGForce} />
+              </div>
+            )}
+            {!busy && lapCount > 0 && (
+              <div className="lap-info">
+                🏆 Best lap: <strong className="stat-readout">{formatDuration(bestLapSeconds ?? 0)}</strong> ·{' '}
+                {lapCount} lap{lapCount === 1 ? '' : 's'}
+              </div>
+            )}
           </section>
 
           <section className="toolbar">
@@ -461,7 +642,7 @@ export default function App() {
               type="button"
               className={`tool-btn tag-a ${mode === 'a' ? 'active' : ''}`}
               onClick={() => setMode('a')}
-              disabled={recording}
+              disabled={busy}
             >
               🅰️ Set start
             </button>
@@ -469,7 +650,7 @@ export default function App() {
               type="button"
               className={`tool-btn tag-b ${mode === 'b' ? 'active' : ''}`}
               onClick={() => setMode('b')}
-              disabled={recording}
+              disabled={busy}
             >
               🏁 Set finish
             </button>
@@ -477,7 +658,7 @@ export default function App() {
               type="button"
               className={`tool-btn ${mode === 'waypoint' ? 'active' : ''}`}
               onClick={() => setMode('waypoint')}
-              disabled={recording}
+              disabled={busy}
             >
               ➕ Add route point
             </button>
@@ -490,7 +671,7 @@ export default function App() {
                 type="button"
                 className={`profile-btn ${profile === opt.id ? 'active' : ''}`}
                 onClick={() => setProfile(opt.id)}
-                disabled={recording}
+                disabled={busy}
               >
                 {opt.icon} {opt.label}
               </button>
@@ -509,25 +690,25 @@ export default function App() {
             <div className="status-row">
               📏 Track length: <strong className="stat-readout">{formatDistance(displayDistanceMeters)}</strong>
             </div>
-            {!recording && !recordedTrack && routing && (
+            {!busy && !recordedTrack && routing && (
               <div className="status-row muted">🔄 Finding route on the roads…</div>
             )}
-            {!recording && !recordedTrack && routeError && (
+            {!busy && !recordedTrack && routeError && (
               <div className="status-row muted">{routeError}</div>
             )}
-            {canRoute && routedDurationSeconds !== null && (
+            {routeIsCurrent && routedDurationSeconds !== null && (
               <div className="status-row">
-                ⏱ Est. time: <strong className="stat-readout">{formatSeconds(routedDurationSeconds)}</strong>
+                ⏱ Est. time: <strong className="stat-readout">{formatDuration(routedDurationSeconds)}</strong>
               </div>
             )}
-            {recordedTrack && !recording && (
+            {recordedTrack && !busy && (
               <div className="status-row muted">📡 Recorded from GPS — showing the actual path ridden</div>
             )}
-            {recordedTrack && !recording && sessionDurationSeconds !== null && (
+            {recordedTrack && !busy && sessionDurationSeconds !== null && (
               <div className="telemetry-summary">
                 <div className="telemetry-summary-item">
                   <span className="telemetry-label">Time</span>
-                  <span className="stat-readout">{formatSeconds(sessionDurationSeconds)}</span>
+                  <span className="stat-readout">{formatDuration(sessionDurationSeconds)}</span>
                 </div>
                 <div className="telemetry-summary-item">
                   <span className="telemetry-label">Avg speed</span>
@@ -552,7 +733,7 @@ export default function App() {
             {waypoints.length > 0 && (
               <div className="status-row muted">
                 {waypoints.length} extra point{waypoints.length === 1 ? '' : 's'}
-                {!recording && ' · tap a point on the map to remove it'}
+                {!busy && ' · tap a point on the map to remove it'}
               </div>
             )}
           </section>
@@ -562,11 +743,11 @@ export default function App() {
               type="button"
               className="ghost-btn"
               onClick={handleUndoWaypoint}
-              disabled={waypoints.length === 0 || recording}
+              disabled={waypoints.length === 0 || busy}
             >
               ↩️ Undo last point
             </button>
-            <button type="button" className="ghost-btn danger" onClick={handleClearTrack} disabled={recording}>
+            <button type="button" className="ghost-btn danger" onClick={handleClearTrack} disabled={busy}>
               🗑️ New track
             </button>
           </section>
@@ -593,7 +774,7 @@ export default function App() {
                     type="button"
                     className="track-item"
                     onClick={() => handleLoadTrack(t)}
-                    disabled={recording}
+                    disabled={busy}
                   >
                     <span className="track-name">{t.name}</span>
                     <span className="track-meta">{formatDistance(t.distanceMeters)}</span>
@@ -603,7 +784,7 @@ export default function App() {
                     className="delete-btn"
                     onClick={() => handleDeleteTrack(t.id)}
                     aria-label={`Delete ${t.name}`}
-                    disabled={recording}
+                    disabled={busy}
                   >
                     ✕
                   </button>
@@ -623,7 +804,7 @@ export default function App() {
           routeLine={routedPathForDisplay}
           myLocation={myLocation}
           flyToRequestId={flyToRequestId}
-          locked={recording}
+          locked={busy}
           onMapClick={handleMapClick}
           onMoveA={handleMoveA}
           onMoveB={handleMoveB}
@@ -631,10 +812,11 @@ export default function App() {
         />
         <div className="map-hint">
           {recording && '🔴 Recording — following your ride live'}
-          {!recording && mode === 'a' && 'Tap the map to set the start (A)'}
-          {!recording && mode === 'b' && 'Tap the map to set the finish (B)'}
-          {!recording && mode === 'waypoint' && 'Tap the map to add a route point'}
-          {!recording && mode === 'idle' && 'Pick a tool to continue'}
+          {lapRunning && '🏁 Lap in progress — drive to the finish (B)'}
+          {!busy && mode === 'a' && 'Tap the map to set the start (A)'}
+          {!busy && mode === 'b' && 'Tap the map to set the finish (B)'}
+          {!busy && mode === 'waypoint' && 'Tap the map to add a route point'}
+          {!busy && mode === 'idle' && 'Pick a tool to continue'}
         </div>
         <button type="button" className="locate-btn" onClick={handleLocateMe} aria-label="My location">
           📍

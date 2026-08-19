@@ -103,7 +103,7 @@ export default function MapView({
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         subdomains="abcd"
         maxZoom={20}
       />
@@ -111,10 +111,16 @@ export default function MapView({
       {myLocation && <FlyToLocation point={myLocation} requestId={flyToRequestId} />}
 
       {lineToDraw.length > 1 && (
-        <Polyline
-          positions={lineToDraw.map((p) => [p.lat, p.lng])}
-          pathOptions={{ color: '#f97316', weight: 5, opacity: 0.9 }}
-        />
+        <>
+          <Polyline
+            positions={lineToDraw.map((p) => [p.lat, p.lng])}
+            pathOptions={{ color: '#ffffff', weight: 9, opacity: 0.9 }}
+          />
+          <Polyline
+            positions={lineToDraw.map((p) => [p.lat, p.lng])}
+            pathOptions={{ color: '#f97316', weight: 5, opacity: 0.95 }}
+          />
+        </>
       )}
 
       {a && (
