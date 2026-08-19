@@ -142,6 +142,57 @@
   }
 }
 
+.telemetry-row {
+  display: flex;
+  gap: 8px;
+}
+
+.telemetry-tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  background: #171d28;
+  border: 1px solid #2d3341;
+}
+
+.telemetry-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #9ca3af;
+}
+
+.telemetry-value {
+  font-size: 16px;
+  color: #ffffff;
+}
+
+.telemetry-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.telemetry-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #171d28;
+  border: 1px solid #2d3341;
+}
+
+.telemetry-summary-item .stat-readout {
+  font-size: 14px;
+  color: #ffffff;
+}
+
 .location-error {
   font-size: 12px;
   color: #fca5a5;

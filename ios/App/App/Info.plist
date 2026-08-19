@@ -25,7 +25,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Race Maps koristi tvoju lokaciju da snimi start i cilj staze tokom vožnje.</string>
+	<string>Race Maps uses your location to record the start and finish of your track while you ride.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Race Maps uses motion sensors to show live speed and G-force while recording a ride.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

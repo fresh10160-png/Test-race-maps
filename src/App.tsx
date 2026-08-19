@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PluginListenerHandle } from '@capacitor/core'
 import MapView from './MapView'
 import { formatDistance, haversineDistance, pathDistance } from './geo'
 import {
@@ -6,7 +7,9 @@ import {
   ensureLocationPermission,
   getCurrentPoint,
   watchPoint,
+  type GeoSample,
 } from './geolocation'
+import { watchGForce } from './motion'
 import { fetchRoute, type RouteProfile } from './routing'
 import { loadTracks, saveTracks } from './storage'
 import type { EditMode, LatLngPoint, SavedTrack } from './types'
@@ -15,6 +18,7 @@ import './app.css'
 const MIN_RECORD_DISTANCE_M = 8
 const ROUTE_DEBOUNCE_MS = 500
 const MOBILE_QUERY = '(max-width: 720px)'
+const MAX_PLAUSIBLE_SPEED_KMH = 400
 
 const PROFILE_OPTIONS: { id: RouteProfile; label: string; icon: string }[] = [
   { id: 'driving', label: 'Drive', icon: '🚗' },
@@ -26,11 +30,23 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
+function formatSeconds(totalSecondsInput: number): string {
+  const totalSeconds = Math.max(0, Math.floor(totalSecondsInput))
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+function formatElapsed(ms: number): string {
+  return formatSeconds(ms / 1000)
+}
+
+function formatSpeed(kmh: number): string {
+  return `${kmh.toFixed(1)} km/h`
+}
+
+function formatGForce(g: number): string {
+  return `${g.toFixed(2)} g`
 }
 
 export default function App() {
@@ -57,7 +73,16 @@ export default function App() {
   const [routedDistance, setRoutedDistance] = useState<number | null>(null)
   const [routing, setRouting] = useState(false)
   const [routeError, setRouteError] = useState<string | null>(null)
+  const [routedDurationSeconds, setRoutedDurationSeconds] = useState<number | null>(null)
+  const [liveSpeedKmh, setLiveSpeedKmh] = useState<number | null>(null)
+  const [liveGForce, setLiveGForce] = useState<number | null>(null)
+  const [sessionDurationSeconds, setSessionDurationSeconds] = useState<number | null>(null)
+  const [sessionAvgSpeedKmh, setSessionAvgSpeedKmh] = useState<number | null>(null)
+  const [sessionMaxSpeedKmh, setSessionMaxSpeedKmh] = useState<number | null>(null)
+  const [sessionMaxGForce, setSessionMaxGForce] = useState<number | null>(null)
   const watchIdRef = useRef<string | null>(null)
+  const motionHandleRef = useRef<PluginListenerHandle | null>(null)
+  const lastSampleRef = useRef<{ point: LatLngPoint; timestamp: number } | null>(null)
 
   useEffect(() => {
     if (!recording) return
@@ -69,6 +94,9 @@ export default function App() {
     return () => {
       if (watchIdRef.current) {
         clearPointWatch(watchIdRef.current)
+      }
+      if (motionHandleRef.current) {
+        motionHandleRef.current.remove()
       }
     }
   }, [])
@@ -97,15 +125,18 @@ export default function App() {
         if (result) {
           setRoutedPath(result.coordinates)
           setRoutedDistance(result.distanceMeters)
+          setRoutedDurationSeconds(result.durationSeconds)
         } else {
           setRoutedPath(null)
           setRoutedDistance(null)
+          setRoutedDurationSeconds(null)
           setRouteError("Couldn't find a route on the roads — showing a straight line.")
         }
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           setRoutedPath(null)
           setRoutedDistance(null)
+          setRoutedDurationSeconds(null)
           setRouteError("Couldn't reach the routing service — showing a straight line.")
         }
       } finally {
@@ -159,8 +190,15 @@ export default function App() {
     setRecordedTrack(false)
     setRoutedPath(null)
     setRoutedDistance(null)
+    setRoutedDurationSeconds(null)
     setRouteError(null)
     setRouting(false)
+    setSessionDurationSeconds(null)
+    setSessionAvgSpeedKmh(null)
+    setSessionMaxSpeedKmh(null)
+    setSessionMaxGForce(null)
+    setLiveSpeedKmh(null)
+    setLiveGForce(null)
     setMode('a')
   }
 
@@ -184,6 +222,10 @@ export default function App() {
       profile,
       recorded: recordedTrack,
       routeCoordinates: routedPath ?? undefined,
+      durationSeconds: recordedTrack ? sessionDurationSeconds ?? undefined : routedDurationSeconds ?? undefined,
+      avgSpeedKmh: sessionAvgSpeedKmh ?? undefined,
+      maxSpeedKmh: sessionMaxSpeedKmh ?? undefined,
+      maxGForce: sessionMaxGForce ?? undefined,
     }
 
     setTracks((prev) => {
@@ -208,8 +250,15 @@ export default function App() {
     setRecordedTrack(track.recorded ?? false)
     setRoutedPath(track.routeCoordinates ?? null)
     setRoutedDistance(track.routeCoordinates ? track.distanceMeters : null)
+    setRoutedDurationSeconds(!track.recorded ? track.durationSeconds ?? null : null)
     setRouteError(null)
     setRouting(false)
+    setSessionDurationSeconds(track.recorded ? track.durationSeconds ?? null : null)
+    setSessionAvgSpeedKmh(track.avgSpeedKmh ?? null)
+    setSessionMaxSpeedKmh(track.maxSpeedKmh ?? null)
+    setSessionMaxGForce(track.maxGForce ?? null)
+    setLiveSpeedKmh(null)
+    setLiveGForce(null)
     setMode('idle')
   }
 
@@ -261,20 +310,50 @@ export default function App() {
       setRecording(true)
       setRecordedTrack(true)
       setRecordingStartedAt(Date.now())
+      setLiveSpeedKmh(null)
+      setLiveGForce(null)
+      setSessionDurationSeconds(null)
+      setSessionAvgSpeedKmh(null)
+      setSessionMaxSpeedKmh(null)
+      setSessionMaxGForce(null)
+      lastSampleRef.current = { point: start, timestamp: Date.now() }
 
       const id = await watchPoint(
-        (p) => {
+        (sample: GeoSample) => {
           setLocationError(null)
-          setMyLocation(p)
+          setMyLocation(sample.point)
+
+          let speedKmh: number | null =
+            sample.speedMps !== null && sample.speedMps >= 0 ? sample.speedMps * 3.6 : null
+          const prevSample = lastSampleRef.current
+          if (speedKmh === null && prevSample) {
+            const dtSeconds = (sample.timestamp - prevSample.timestamp) / 1000
+            if (dtSeconds > 0) {
+              const dMeters = haversineDistance(prevSample.point, sample.point)
+              speedKmh = (dMeters / dtSeconds) * 3.6
+            }
+          }
+          lastSampleRef.current = { point: sample.point, timestamp: sample.timestamp }
+
+          if (speedKmh !== null && speedKmh <= MAX_PLAUSIBLE_SPEED_KMH) {
+            setLiveSpeedKmh(speedKmh)
+            setSessionMaxSpeedKmh((prev) => Math.max(prev ?? 0, speedKmh as number))
+          }
+
           setWaypoints((prev) => {
             const last = prev.length > 0 ? prev[prev.length - 1] : start
-            if (haversineDistance(last, p) < MIN_RECORD_DISTANCE_M) return prev
-            return [...prev, p]
+            if (haversineDistance(last, sample.point) < MIN_RECORD_DISTANCE_M) return prev
+            return [...prev, sample.point]
           })
         },
         () => setLocationError('Error while tracking your location.'),
       )
       watchIdRef.current = id
+
+      motionHandleRef.current = await watchGForce((g) => {
+        setLiveGForce(g)
+        setSessionMaxGForce((prev) => Math.max(prev ?? 0, g))
+      })
     } catch {
       setLocationError('Could not get your location. Check that GPS is turned on.')
       setRecording(false)
@@ -282,23 +361,40 @@ export default function App() {
   }
 
   async function handleStopRecording() {
+    const startedAt = recordingStartedAt
     setRecording(false)
     setRecordingStartedAt(null)
+    setLiveSpeedKmh(null)
+    setLiveGForce(null)
     if (watchIdRef.current) {
       await clearPointWatch(watchIdRef.current)
       watchIdRef.current = null
     }
+    if (motionHandleRef.current) {
+      await motionHandleRef.current.remove()
+      motionHandleRef.current = null
+    }
+
+    let finalB: LatLngPoint | null = null
     try {
       const end = await getCurrentPoint()
       setLocationError(null)
       setB(end)
       setMyLocation(end)
+      finalB = end
     } catch {
-      setWaypoints((prev) => {
-        if (prev.length === 0) return prev
-        setB(prev[prev.length - 1])
-        return prev.slice(0, -1)
-      })
+      if (waypoints.length > 0) {
+        finalB = waypoints[waypoints.length - 1]
+        setB(finalB)
+        setWaypoints((prev) => prev.slice(0, -1))
+      }
+    }
+
+    if (startedAt && finalB) {
+      const durationSeconds = (Date.now() - startedAt) / 1000
+      const finalDistance = pathDistance([a as LatLngPoint, ...waypoints, finalB])
+      setSessionDurationSeconds(durationSeconds)
+      setSessionAvgSpeedKmh(durationSeconds > 0 ? (finalDistance / durationSeconds) * 3.6 : 0)
     }
   }
 
@@ -339,6 +435,20 @@ export default function App() {
                   <span className="stat-readout">
                     {formatElapsed(elapsedMs)} · {formatDistance(distanceMeters)}
                   </span>
+                </div>
+                <div className="telemetry-row">
+                  <div className="telemetry-tile">
+                    <span className="telemetry-label">Speed</span>
+                    <span className="telemetry-value stat-readout">
+                      {liveSpeedKmh !== null ? formatSpeed(liveSpeedKmh) : '—'}
+                    </span>
+                  </div>
+                  <div className="telemetry-tile">
+                    <span className="telemetry-label">G-force</span>
+                    <span className="telemetry-value stat-readout">
+                      {liveGForce !== null ? formatGForce(liveGForce) : '—'}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -404,8 +514,39 @@ export default function App() {
             {!recording && !recordedTrack && routeError && (
               <div className="status-row muted">{routeError}</div>
             )}
+            {canRoute && routedDurationSeconds !== null && (
+              <div className="status-row">
+                ⏱ Est. time: <strong className="stat-readout">{formatSeconds(routedDurationSeconds)}</strong>
+              </div>
+            )}
             {recordedTrack && !recording && (
               <div className="status-row muted">📡 Recorded from GPS — showing the actual path ridden</div>
+            )}
+            {recordedTrack && !recording && sessionDurationSeconds !== null && (
+              <div className="telemetry-summary">
+                <div className="telemetry-summary-item">
+                  <span className="telemetry-label">Time</span>
+                  <span className="stat-readout">{formatSeconds(sessionDurationSeconds)}</span>
+                </div>
+                <div className="telemetry-summary-item">
+                  <span className="telemetry-label">Avg speed</span>
+                  <span className="stat-readout">
+                    {sessionAvgSpeedKmh !== null ? formatSpeed(sessionAvgSpeedKmh) : '—'}
+                  </span>
+                </div>
+                <div className="telemetry-summary-item">
+                  <span className="telemetry-label">Max speed</span>
+                  <span className="stat-readout">
+                    {sessionMaxSpeedKmh !== null ? formatSpeed(sessionMaxSpeedKmh) : '—'}
+                  </span>
+                </div>
+                <div className="telemetry-summary-item">
+                  <span className="telemetry-label">Peak G</span>
+                  <span className="stat-readout">
+                    {sessionMaxGForce !== null ? formatGForce(sessionMaxGForce) : '—'}
+                  </span>
+                </div>
+              </div>
             )}
             {waypoints.length > 0 && (
               <div className="status-row muted">

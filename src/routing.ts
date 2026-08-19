@@ -11,6 +11,7 @@ const PROFILE_PATH: Record<RouteProfile, string> = {
 export interface RouteResult {
   coordinates: LatLngPoint[]
   distanceMeters: number
+  durationSeconds: number
 }
 
 export async function fetchRoute(
@@ -34,5 +35,5 @@ export async function fetchRoute(
     ([lng, lat]: [number, number]) => ({ lat, lng }),
   )
 
-  return { coordinates, distanceMeters: route.distance }
+  return { coordinates, distanceMeters: route.distance, durationSeconds: route.duration }
 }

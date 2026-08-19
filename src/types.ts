@@ -14,6 +14,10 @@ export interface SavedTrack {
   profile?: 'driving' | 'cycling' | 'walking'
   recorded?: boolean
   routeCoordinates?: LatLngPoint[]
+  durationSeconds?: number
+  avgSpeedKmh?: number
+  maxSpeedKmh?: number
+  maxGForce?: number
 }
 
 export type EditMode = 'idle' | 'a' | 'b' | 'waypoint'

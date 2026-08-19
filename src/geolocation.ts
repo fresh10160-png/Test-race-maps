@@ -13,8 +13,14 @@ export async function getCurrentPoint(): Promise<LatLngPoint> {
   return { lat: pos.coords.latitude, lng: pos.coords.longitude }
 }
 
+export interface GeoSample {
+  point: LatLngPoint
+  speedMps: number | null
+  timestamp: number
+}
+
 export async function watchPoint(
-  onPoint: (p: LatLngPoint) => void,
+  onSample: (s: GeoSample) => void,
   onError: (err: unknown) => void,
 ): Promise<string> {
   return Geolocation.watchPosition({ enableHighAccuracy: true }, (position, err) => {
@@ -23,7 +29,11 @@ export async function watchPoint(
       return
     }
     if (position) {
-      onPoint({ lat: position.coords.latitude, lng: position.coords.longitude })
+      onSample({
+        point: { lat: position.coords.latitude, lng: position.coords.longitude },
+        speedMps: position.coords.speed ?? null,
+        timestamp: position.timestamp,
+      })
     }
   })
 }

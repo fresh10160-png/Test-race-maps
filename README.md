@@ -13,6 +13,7 @@ A Google Maps-style app built for tagging "race" tracks: set a start (A) and fin
 - Save tracks locally (localStorage) with a name; load and delete saved tracks
 - 📍 "My location" button — centers the map on your current position
 - 🔴 Live ride recording — tap "start", GPS follows your ride and automatically adds route points, tap "stop" and A/B/route are set automatically
+- 📊 Race telemetry — live speed and G-force while recording, plus a session summary (time, avg/max speed, peak G) saved with the track; manually placed routes show an estimated travel time instead
 - Collapsible bottom-sheet panel on mobile, so the map takes the full screen like a real map app
 
 ## Run locally
@@ -60,6 +61,8 @@ The app uses [`@capacitor/geolocation`](https://capacitorjs.com/docs/apis/geoloc
 - iOS: `NSLocationWhenInUseUsageDescription` in `ios/App/App/Info.plist`
 
 The app will prompt the user for permission on first use.
+
+Live speed/G-force telemetry uses [`@capacitor/motion`](https://capacitorjs.com/docs/apis/motion) (the device accelerometer). On iOS this needs `NSMotionUsageDescription`, already added to `Info.plist`; Android needs no extra permission.
 
 ### After changing the web code
 
