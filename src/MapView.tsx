@@ -64,6 +64,7 @@ interface MapViewProps {
   routeLine: LatLngPoint[] | null
   myLocation: LatLngPoint | null
   flyToRequestId: number
+  locked: boolean
   onMapClick: (p: LatLngPoint) => void
   onMoveA: (p: LatLngPoint) => void
   onMoveB: (p: LatLngPoint) => void
@@ -78,6 +79,7 @@ export default function MapView({
   routeLine,
   myLocation,
   flyToRequestId,
+  locked,
   onMapClick,
   onMoveA,
   onMoveB,
@@ -119,7 +121,7 @@ export default function MapView({
         <Marker
           position={[a.lat, a.lng]}
           icon={iconA}
-          draggable
+          draggable={!locked}
           eventHandlers={{
             dragend: (e) => {
               const ll = e.target.getLatLng()
@@ -141,7 +143,9 @@ export default function MapView({
             weight: 2,
           }}
           eventHandlers={{
-            click: () => onRemoveWaypoint(i),
+            click: () => {
+              if (!locked) onRemoveWaypoint(i)
+            },
           }}
         />
       ))}
@@ -150,7 +154,7 @@ export default function MapView({
         <Marker
           position={[b.lat, b.lng]}
           icon={iconB}
-          draggable
+          draggable={!locked}
           eventHandlers={{
             dragend: (e) => {
               const ll = e.target.getLatLng()

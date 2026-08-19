@@ -433,6 +433,12 @@
   background: #1a2029;
 }
 
+.track-item:disabled,
+.delete-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .track-name {
   overflow: hidden;
   text-overflow: ellipsis;

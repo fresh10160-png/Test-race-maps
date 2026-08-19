@@ -291,6 +291,7 @@ export default function App() {
   }
 
   async function handleStartRecording() {
+    if (recording) return
     setLocationError(null)
     const granted = await ensureLocationPermission()
     if (!granted) {
@@ -588,7 +589,12 @@ export default function App() {
             <ul>
               {tracks.map((t) => (
                 <li key={t.id} className={t.id === activeTrackId ? 'active' : ''}>
-                  <button type="button" className="track-item" onClick={() => handleLoadTrack(t)}>
+                  <button
+                    type="button"
+                    className="track-item"
+                    onClick={() => handleLoadTrack(t)}
+                    disabled={recording}
+                  >
                     <span className="track-name">{t.name}</span>
                     <span className="track-meta">{formatDistance(t.distanceMeters)}</span>
                   </button>
@@ -597,6 +603,7 @@ export default function App() {
                     className="delete-btn"
                     onClick={() => handleDeleteTrack(t.id)}
                     aria-label={`Delete ${t.name}`}
+                    disabled={recording}
                   >
                     ✕
                   </button>
@@ -616,6 +623,7 @@ export default function App() {
           routeLine={routedPathForDisplay}
           myLocation={myLocation}
           flyToRequestId={flyToRequestId}
+          locked={recording}
           onMapClick={handleMapClick}
           onMoveA={handleMoveA}
           onMoveB={handleMoveB}
