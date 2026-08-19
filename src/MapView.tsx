@@ -16,17 +16,17 @@ import type { EditMode, LatLngPoint } from './types'
 const FALLBACK_CENTER: LatLngPoint = { lat: 20, lng: 10 }
 const FALLBACK_ZOOM = 2
 
-function tagIcon(label: string, color: string) {
+function tagIcon(label: string, bgColor: string, textColor: string, borderColor: string) {
   return L.divIcon({
     className: 'tag-icon',
-    html: `<div class="tag-pin" style="background:${color}"><span>${label}</span></div>`,
+    html: `<div class="tag-pin" style="background:${bgColor};color:${textColor};border-color:${borderColor}"><span>${label}</span></div>`,
     iconSize: [34, 34],
     iconAnchor: [17, 34],
   })
 }
 
-const iconA = tagIcon('A', '#22c55e')
-const iconB = tagIcon('B', '#ef4444')
+const iconA = tagIcon('A', '#f4f4f5', '#0a0a0d', '#0a0a0d')
+const iconB = tagIcon('B', '#ff2d3d', '#ffffff', '#ffffff')
 
 interface MapClicksProps {
   mode: EditMode
@@ -135,7 +135,7 @@ export default function MapView({
           />
           <Polyline
             positions={lineToDraw.map((p) => [p.lat, p.lng])}
-            pathOptions={{ color: '#f97316', weight: 5, opacity: 0.95 }}
+            pathOptions={{ color: '#ff2d3d', weight: 5, opacity: 0.95 }}
           />
         </>
       )}
@@ -160,7 +160,7 @@ export default function MapView({
           center={[wp.lat, wp.lng]}
           radius={6}
           pathOptions={{
-            color: '#f97316',
+            color: '#ff2d3d',
             fillColor: '#ffffff',
             fillOpacity: 1,
             weight: 2,
@@ -194,7 +194,7 @@ export default function MapView({
           pathOptions={{
             color: '#ffffff',
             weight: 3,
-            fillColor: '#3b82f6',
+            fillColor: '#00e5ff',
             fillOpacity: 1,
           }}
           interactive={false}

@@ -1,11 +1,11 @@
 # Race Maps
 
-A Google Maps-style app built for tagging "race" tracks: set a start (A) and finish (B) point on the map, optionally shape the route with extra points, and save the track for later.
+A navigation app built for tagging and driving "race" tracks: set a start (A) and finish (B) — by tapping the map or searching an address — shape the route, save it, then drive it with a live stopwatch, turn-by-turn guidance, and speed/G-force telemetry. Styled as a dark, high-contrast street-racing dashboard (black/red/cyan, angular UI, glowing digital readouts) rather than a generic map app skin.
 
 ## Features
 
-- Interactive map with real streets (Leaflet + OpenStreetMap data, light Google Maps-style "race" theme, no API key needed), auto-centered on your real location on first load (no hardcoded city)
-- A/B tagging: set the start (A) and finish (B) point with a tap on the map
+- Interactive map with real streets (Leaflet + OpenStreetMap data, no API key needed), auto-centered on your real location on first load (no hardcoded city)
+- A/B tagging: set the start (A) and finish (B) point with a tap on the map, or by searching an address (Nominatim geocoding) — start and destination each have their own search box, like a normal navigation app
 - Manually placed routes automatically snap to real roads/paths (via OSRM routing), with a driving/cycling/walking profile picker
 - Add extra points to shape the route along the actual track
 - Drag the A/B markers to fine-tune their position

@@ -9,6 +9,7 @@ import {
   watchPoint,
   type GeoSample,
 } from './geolocation'
+import { searchAddress, type GeocodeResult } from './geocoding'
 import { watchGForce } from './motion'
 import { describeManeuver, maneuverIcon } from './navigation'
 import { fetchRoute, type RouteProfile, type RouteStep } from './routing'
@@ -87,6 +88,73 @@ function TelemetryTiles({ speedKmh, gForce }: { speedKmh: number | null; gForce:
         <span className="telemetry-label">G-force</span>
         <span className="telemetry-value stat-readout">{gForce !== null ? formatGForce(gForce) : '—'}</span>
       </div>
+    </div>
+  )
+}
+
+interface AddressSearchProps {
+  placeholder: string
+  disabled: boolean
+  onSelect: (point: LatLngPoint) => void
+}
+
+function AddressSearch({ placeholder, disabled, onSelect }: AddressSearchProps) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<GeocodeResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = query.trim()
+    if (!trimmed) return
+    setSearching(true)
+    setError(null)
+    setResults([])
+    try {
+      const found = await searchAddress(trimmed)
+      setResults(found)
+      if (found.length === 0) setError('No matches found.')
+    } catch {
+      setError('Address search failed.')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  function handlePick(r: GeocodeResult) {
+    onSelect(r.point)
+    setResults([])
+    setQuery(r.label)
+    setError(null)
+  }
+
+  return (
+    <div className="address-search">
+      <form className="address-search-form" onSubmit={handleSearch}>
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          disabled={disabled}
+        />
+        <button type="submit" className="address-search-btn" disabled={disabled || searching}>
+          {searching ? '…' : '🔍'}
+        </button>
+      </form>
+      {error && <p className="address-error">{error}</p>}
+      {results.length > 0 && (
+        <ul className="address-results">
+          {results.map((r, i) => (
+            <li key={i}>
+              <button type="button" onClick={() => handlePick(r)}>
+                {r.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -693,6 +761,25 @@ export default function App() {
                 {lapCount} lap{lapCount === 1 ? '' : 's'}
               </div>
             )}
+          </section>
+
+          <section className="address-panel">
+            <AddressSearch
+              placeholder="Search start address…"
+              disabled={busy}
+              onSelect={(p) => {
+                handleMoveA(p)
+                setMode('idle')
+              }}
+            />
+            <AddressSearch
+              placeholder="Search destination…"
+              disabled={busy}
+              onSelect={(p) => {
+                handleMoveB(p)
+                setMode('idle')
+              }}
+            />
           </section>
 
           <section className="toolbar">
