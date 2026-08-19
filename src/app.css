@@ -193,6 +193,39 @@
   color: #ffffff;
 }
 
+.nav-instruction {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #171d28;
+  border: 1px solid #2d3341;
+}
+
+.nav-instruction .nav-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nav-instruction-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.nav-distance {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
 .location-error {
   font-size: 12px;
   color: #fca5a5;
@@ -528,6 +561,26 @@
   z-index: 1000;
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-hint.nav-hint {
+  background: rgba(17, 24, 39, 0.95);
+  border: 1px solid #f97316;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.map-hint .nav-icon {
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 .mode-a,

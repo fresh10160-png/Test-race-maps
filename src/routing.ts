@@ -10,10 +10,19 @@ const PROFILE_PATH: Record<RouteProfile, string> = {
   walking: 'foot',
 }
 
+export interface RouteStep {
+  distanceMeters: number
+  maneuverType: string
+  maneuverModifier?: string
+  maneuverLocation: LatLngPoint
+  streetName: string
+}
+
 export interface RouteResult {
   coordinates: LatLngPoint[]
   distanceMeters: number
   durationSeconds: number
+  steps: RouteStep[]
 }
 
 export async function fetchRoute(
@@ -24,7 +33,7 @@ export async function fetchRoute(
   if (points.length < 2) return null
 
   const coords = points.map((p) => `${p.lng},${p.lat}`).join(';')
-  const url = `https://router.project-osrm.org/route/v1/${PROFILE_PATH[profile]}/${coords}?overview=full&geometries=geojson`
+  const url = `https://router.project-osrm.org/route/v1/${PROFILE_PATH[profile]}/${coords}?overview=full&geometries=geojson&steps=true`
 
   // Compose the caller's cancellation signal with our own timeout, so a
   // hung request (accepted but never answered) can't leave the UI stuck
@@ -46,7 +55,25 @@ export async function fetchRoute(
       ([lng, lat]: [number, number]) => ({ lat, lng }),
     )
 
-    return { coordinates, distanceMeters: route.distance, durationSeconds: route.duration }
+    const steps: RouteStep[] = (route.legs ?? []).flatMap((leg: { steps?: unknown[] }) =>
+      (leg.steps ?? []).map((step) => {
+        const s = step as {
+          distance: number
+          name?: string
+          maneuver: { type: string; modifier?: string; location: [number, number] }
+        }
+        const [lng, lat] = s.maneuver.location
+        return {
+          distanceMeters: s.distance,
+          maneuverType: s.maneuver.type,
+          maneuverModifier: s.maneuver.modifier,
+          maneuverLocation: { lat, lng },
+          streetName: s.name ?? '',
+        }
+      }),
+    )
+
+    return { coordinates, distanceMeters: route.distance, durationSeconds: route.duration, steps }
   } finally {
     clearTimeout(timeoutId)
     signal?.removeEventListener('abort', onExternalAbort)

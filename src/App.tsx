@@ -10,7 +10,8 @@ import {
   type GeoSample,
 } from './geolocation'
 import { watchGForce } from './motion'
-import { fetchRoute, type RouteProfile } from './routing'
+import { describeManeuver, maneuverIcon } from './navigation'
+import { fetchRoute, type RouteProfile, type RouteStep } from './routing'
 import { loadTracks, saveTracks } from './storage'
 import type { EditMode, LapRecord, LatLngPoint, SavedTrack } from './types'
 import './app.css'
@@ -21,6 +22,7 @@ const MOBILE_QUERY = '(max-width: 720px)'
 const MAX_PLAUSIBLE_SPEED_KMH = 400
 const LAP_FINISH_RADIUS_M = 25
 const MIN_LAP_SECONDS = 15
+const STEP_ADVANCE_RADIUS_M = 30
 
 const PROFILE_OPTIONS: { id: RouteProfile; label: string; icon: string }[] = [
   { id: 'driving', label: 'Drive', icon: '🚗' },
@@ -114,6 +116,8 @@ export default function App() {
   const [routing, setRouting] = useState(false)
   const [routeError, setRouteError] = useState<string | null>(null)
   const [routedDurationSeconds, setRoutedDurationSeconds] = useState<number | null>(null)
+  const [routeSteps, setRouteSteps] = useState<RouteStep[] | null>(null)
+  const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [liveSpeedKmh, setLiveSpeedKmh] = useState<number | null>(null)
   const [liveGForce, setLiveGForce] = useState<number | null>(null)
   const [sessionDurationSeconds, setSessionDurationSeconds] = useState<number | null>(null)
@@ -173,10 +177,12 @@ export default function App() {
           setRoutedPath(result.coordinates)
           setRoutedDistance(result.distanceMeters)
           setRoutedDurationSeconds(result.durationSeconds)
+          setRouteSteps(result.steps)
         } else {
           setRoutedPath(null)
           setRoutedDistance(null)
           setRoutedDurationSeconds(null)
+          setRouteSteps(null)
           setRouteError("Couldn't find a route on the roads — showing a straight line.")
         }
       } catch (err) {
@@ -184,6 +190,7 @@ export default function App() {
           setRoutedPath(null)
           setRoutedDistance(null)
           setRoutedDurationSeconds(null)
+          setRouteSteps(null)
           setRouteError("Couldn't reach the routing service — showing a straight line.")
         }
       } finally {
@@ -244,6 +251,8 @@ export default function App() {
     setRoutedPath(null)
     setRoutedDistance(null)
     setRoutedDurationSeconds(null)
+    setRouteSteps(null)
+    setCurrentStepIndex(0)
     setRouteError(null)
     setRouting(false)
     setSessionDurationSeconds(null)
@@ -308,6 +317,8 @@ export default function App() {
     setRoutedPath(track.routeCoordinates ?? null)
     setRoutedDistance(track.routeCoordinates ? track.distanceMeters : null)
     setRoutedDurationSeconds(!track.recorded ? track.durationSeconds ?? null : null)
+    setRouteSteps(null)
+    setCurrentStepIndex(0)
     setRouteError(null)
     setRouting(false)
     setSessionDurationSeconds(track.recorded ? track.durationSeconds ?? null : null)
@@ -461,10 +472,12 @@ export default function App() {
     const trackId = activeTrackId
     const targetB = b
     const lapDistance = displayDistanceMeters
+    const steps = routeSteps
 
     try {
       const startPoint = await getCurrentPoint()
       const lapStart = Date.now()
+      let stepIdx = steps && steps.length > 1 ? 1 : 0
       setMode('idle')
       setMyLocation(startPoint)
       setFlyToRequestId((n) => n + 1)
@@ -474,6 +487,7 @@ export default function App() {
       setLiveGForce(null)
       setSessionMaxSpeedKmh(null)
       setSessionMaxGForce(null)
+      setCurrentStepIndex(stepIdx)
       maxSpeedRef.current = 0
       maxGForceRef.current = 0
       lastSampleRef.current = { point: startPoint, timestamp: lapStart }
@@ -526,6 +540,14 @@ export default function App() {
             setSessionMaxSpeedKmh(maxSpeedRef.current)
           }
 
+          if (steps && stepIdx < steps.length - 1) {
+            const distToStep = haversineDistance(sample.point, steps[stepIdx].maneuverLocation)
+            if (distToStep < STEP_ADVANCE_RADIUS_M) {
+              stepIdx += 1
+              setCurrentStepIndex(stepIdx)
+            }
+          }
+
           const elapsedSoFar = (sample.timestamp - lapStart) / 1000
           const distToFinish = haversineDistance(sample.point, targetB)
           if (elapsedSoFar > MIN_LAP_SECONDS && distToFinish < LAP_FINISH_RADIUS_M) {
@@ -560,6 +582,11 @@ export default function App() {
       : null
   const elapsedMs = recordingStartedAt ? now - recordingStartedAt : 0
   const lapElapsedMs = lapStartedAt ? now - lapStartedAt : 0
+  const currentNavStep =
+    lapRunning && routeSteps && currentStepIndex < routeSteps.length ? routeSteps[currentStepIndex] : null
+  const distToManeuver =
+    currentNavStep && myLocation ? haversineDistance(myLocation, currentNavStep.maneuverLocation) : null
+  const distToFinishLive = lapRunning && b && myLocation ? haversineDistance(myLocation, b) : null
 
   return (
     <div className="app-shell">
@@ -622,9 +649,23 @@ export default function App() {
                 >
                   🏁 Finish Lap
                 </button>
+                {currentNavStep && (
+                  <div className="nav-instruction">
+                    <span className="nav-icon">{maneuverIcon(currentNavStep)}</span>
+                    <div className="nav-text">
+                      <span className="nav-instruction-text">{describeManeuver(currentNavStep)}</span>
+                      <span className="nav-distance">
+                        {distToManeuver !== null ? `in ${formatDistance(distToManeuver)}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="recording-stats">
                   <span className="pulse-dot" />
-                  <span className="stat-readout">{formatElapsed(lapElapsedMs)}</span>
+                  <span className="stat-readout">
+                    {formatElapsed(lapElapsedMs)}
+                    {distToFinishLive !== null && ` · ${formatDistance(distToFinishLive)} to finish`}
+                  </span>
                 </div>
                 <TelemetryTiles speedKmh={liveSpeedKmh} gForce={liveGForce} />
               </div>
@@ -810,9 +851,16 @@ export default function App() {
           onMoveB={handleMoveB}
           onRemoveWaypoint={handleRemoveWaypoint}
         />
-        <div className="map-hint">
+        <div className={`map-hint ${lapRunning && currentNavStep ? 'nav-hint' : ''}`}>
           {recording && '🔴 Recording — following your ride live'}
-          {lapRunning && '🏁 Lap in progress — drive to the finish (B)'}
+          {lapRunning && currentNavStep && (
+            <>
+              <span className="nav-icon">{maneuverIcon(currentNavStep)}</span>
+              {describeManeuver(currentNavStep)}
+              {distToManeuver !== null && ` — in ${formatDistance(distToManeuver)}`}
+            </>
+          )}
+          {lapRunning && !currentNavStep && '🏁 Lap in progress — drive to the finish (B)'}
           {!busy && mode === 'a' && 'Tap the map to set the start (A)'}
           {!busy && mode === 'b' && 'Tap the map to set the finish (B)'}
           {!busy && mode === 'waypoint' && 'Tap the map to add a route point'}

@@ -15,6 +15,7 @@ A Google Maps-style app built for tagging "race" tracks: set a start (A) and fin
 - 🔴 Live ride recording — tap "start", GPS follows your ride and automatically adds route points, tap "stop" and A/B/route are set automatically
 - 📊 Race telemetry — live speed and G-force while recording, plus a session summary (time, avg/max speed, peak G) saved with the track; manually placed routes show an estimated travel time instead (classic h:mm:ss format)
 - 🏁 Lap timer — once a track is saved, hit "Start Lap" to actually drive/ride it with a live stopwatch, speed, and G-force; the lap auto-finishes when you reach the finish point (or stop it manually), and every lap is saved so you can chase your best time
+- 🧭 Turn-by-turn navigation during a lap — a live instruction banner ("Turn left onto Main St — in 150 m") guides you along the route, driven by the same OSRM directions used to draw it
 - Collapsible bottom-sheet panel on mobile, so the map takes the full screen like a real map app
 
 ## Run locally
