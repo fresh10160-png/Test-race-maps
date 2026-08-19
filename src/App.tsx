@@ -12,6 +12,7 @@ import type { EditMode, LatLngPoint, SavedTrack } from './types'
 import './app.css'
 
 const MIN_RECORD_DISTANCE_M = 8
+const MOBILE_QUERY = '(max-width: 720px)'
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -39,6 +40,9 @@ export default function App() {
   const [myLocation, setMyLocation] = useState<LatLngPoint | null>(null)
   const [flyToRequestId, setFlyToRequestId] = useState(0)
   const [locationError, setLocationError] = useState<string | null>(null)
+  const [panelExpanded, setPanelExpanded] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia(MOBILE_QUERY).matches,
+  )
   const watchIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -95,7 +99,7 @@ export default function App() {
   function handleSaveTrack(e: React.FormEvent) {
     e.preventDefault()
     if (!a || !b) return
-    const name = trackName.trim() || `Staza ${tracks.length + 1}`
+    const name = trackName.trim() || `Track ${tracks.length + 1}`
 
     const record: SavedTrack = {
       id: activeTrackId ?? makeId(),
@@ -129,7 +133,7 @@ export default function App() {
   }
 
   function handleDeleteTrack(id: string) {
-    if (!confirm('Obrisati ovu stazu?')) return
+    if (!confirm('Delete this track?')) return
     setTracks((prev) => {
       const next = prev.filter((t) => t.id !== id)
       saveTracks(next)
@@ -145,14 +149,14 @@ export default function App() {
     try {
       const granted = await ensureLocationPermission()
       if (!granted) {
-        setLocationError('Dozvola za lokaciju nije odobrena.')
+        setLocationError('Location permission was not granted.')
         return
       }
       const point = await getCurrentPoint()
       setMyLocation(point)
       setFlyToRequestId((n) => n + 1)
     } catch {
-      setLocationError('Nije moguće dobiti lokaciju.')
+      setLocationError('Could not get your location.')
     }
   }
 
@@ -160,7 +164,7 @@ export default function App() {
     setLocationError(null)
     const granted = await ensureLocationPermission()
     if (!granted) {
-      setLocationError('Dozvola za lokaciju nije odobrena.')
+      setLocationError('Location permission was not granted.')
       return
     }
     try {
@@ -186,11 +190,11 @@ export default function App() {
             return [...prev, p]
           })
         },
-        () => setLocationError('Greška pri praćenju lokacije.'),
+        () => setLocationError('Error while tracking your location.'),
       )
       watchIdRef.current = id
     } catch {
-      setLocationError('Nije moguće dobiti lokaciju. Proveri da li je GPS uključen.')
+      setLocationError('Could not get your location. Check that GPS is turned on.')
       setRecording(false)
     }
   }
@@ -221,127 +225,140 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <header className="sidebar-header">
-          <h1>🏁 Race Maps</h1>
-          <p>Obeleži start (A) i cilj (B) svoje staze, po želji dodaj tačke da oblikuješ trasu, pa je sačuvaj.</p>
+      <aside className={`sidebar ${panelExpanded ? 'expanded' : 'collapsed'}`}>
+        <button
+          type="button"
+          className="sidebar-handle"
+          onClick={() => setPanelExpanded((v) => !v)}
+        >
+          <span className="handle-grip" />
+          <span className="handle-title">🏁 RACE MAPS</span>
+          <span className="handle-chevron">{panelExpanded ? '▾' : '▴'}</span>
+        </button>
+
+        <div className="sidebar-body">
+          <p className="sidebar-subtitle">
+            Tag your track's start (A) and finish (B), optionally shape the route, then save it.
+          </p>
           <div className="checkered-strip" />
-        </header>
 
-        <section className="record-panel">
-          {!recording ? (
-            <button type="button" className="record-btn" onClick={handleStartRecording}>
-              🔴 Snimi vožnju uživo
-            </button>
-          ) : (
-            <div className="recording-active">
-              <button type="button" className="record-btn recording" onClick={handleStopRecording}>
-                ⏹ Zaustavi snimanje
+          <section className="record-panel">
+            {!recording ? (
+              <button type="button" className="record-btn" onClick={handleStartRecording}>
+                🔴 Record a live ride
               </button>
-              <div className="recording-stats">
-                <span className="pulse-dot" />
-                {formatElapsed(elapsedMs)} · {formatDistance(distanceMeters)}
+            ) : (
+              <div className="recording-active">
+                <button type="button" className="record-btn recording" onClick={handleStopRecording}>
+                  ⏹ Stop recording
+                </button>
+                <div className="recording-stats">
+                  <span className="pulse-dot" />
+                  <span className="stat-readout">
+                    {formatElapsed(elapsedMs)} · {formatDistance(distanceMeters)}
+                  </span>
+                </div>
               </div>
+            )}
+            {locationError && <div className="location-error">{locationError}</div>}
+          </section>
+
+          <section className="toolbar">
+            <button
+              type="button"
+              className={`tool-btn tag-a ${mode === 'a' ? 'active' : ''}`}
+              onClick={() => setMode('a')}
+              disabled={recording}
+            >
+              🅰️ Set start
+            </button>
+            <button
+              type="button"
+              className={`tool-btn tag-b ${mode === 'b' ? 'active' : ''}`}
+              onClick={() => setMode('b')}
+              disabled={recording}
+            >
+              🏁 Set finish
+            </button>
+            <button
+              type="button"
+              className={`tool-btn ${mode === 'waypoint' ? 'active' : ''}`}
+              onClick={() => setMode('waypoint')}
+              disabled={recording}
+            >
+              ➕ Add route point
+            </button>
+          </section>
+
+          <section className="status-panel">
+            <div className="status-row">
+              <span className={`dot ${a ? 'set' : ''}`} />
+              Start (A): {a ? `${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}` : 'not set'}
             </div>
-          )}
-          {locationError && <div className="location-error">{locationError}</div>}
-        </section>
-
-        <section className="toolbar">
-          <button
-            type="button"
-            className={`tool-btn tag-a ${mode === 'a' ? 'active' : ''}`}
-            onClick={() => setMode('a')}
-            disabled={recording}
-          >
-            🅰️ Postavi start
-          </button>
-          <button
-            type="button"
-            className={`tool-btn tag-b ${mode === 'b' ? 'active' : ''}`}
-            onClick={() => setMode('b')}
-            disabled={recording}
-          >
-            🏁 Postavi cilj
-          </button>
-          <button
-            type="button"
-            className={`tool-btn ${mode === 'waypoint' ? 'active' : ''}`}
-            onClick={() => setMode('waypoint')}
-            disabled={recording}
-          >
-            ➕ Dodaj tačku staze
-          </button>
-        </section>
-
-        <section className="status-panel">
-          <div className="status-row">
-            <span className={`dot ${a ? 'set' : ''}`} />
-            Start (A): {a ? `${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}` : 'nije postavljen'}
-          </div>
-          <div className="status-row">
-            <span className={`dot dot-b ${b ? 'set' : ''}`} />
-            Cilj (B): {b ? `${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}` : 'nije postavljen'}
-          </div>
-          <div className="status-row">
-            📏 Dužina staze: <strong>{formatDistance(distanceMeters)}</strong>
-          </div>
-          {waypoints.length > 0 && (
-            <div className="status-row muted">
-              {waypoints.length} dodatn{waypoints.length === 1 ? 'a tačka' : 'ih tačaka'}
-              {!recording && ' · klikni na tačku na mapi da je ukloniš'}
+            <div className="status-row">
+              <span className={`dot dot-b ${b ? 'set' : ''}`} />
+              Finish (B): {b ? `${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}` : 'not set'}
             </div>
-          )}
-        </section>
+            <div className="status-row">
+              📏 Track length: <strong className="stat-readout">{formatDistance(distanceMeters)}</strong>
+            </div>
+            {waypoints.length > 0 && (
+              <div className="status-row muted">
+                {waypoints.length} extra point{waypoints.length === 1 ? '' : 's'}
+                {!recording && ' · tap a point on the map to remove it'}
+              </div>
+            )}
+          </section>
 
-        <section className="actions-row">
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={handleUndoWaypoint}
-            disabled={waypoints.length === 0 || recording}
-          >
-            ↩️ Ukloni poslednju tačku
-          </button>
-          <button type="button" className="ghost-btn danger" onClick={handleClearTrack} disabled={recording}>
-            🗑️ Nova staza
-          </button>
-        </section>
+          <section className="actions-row">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={handleUndoWaypoint}
+              disabled={waypoints.length === 0 || recording}
+            >
+              ↩️ Undo last point
+            </button>
+            <button type="button" className="ghost-btn danger" onClick={handleClearTrack} disabled={recording}>
+              🗑️ New track
+            </button>
+          </section>
 
-        <form className="save-form" onSubmit={handleSaveTrack}>
-          <input
-            type="text"
-            placeholder="Naziv staze (npr. Ada Ciganlija krug)"
-            value={trackName}
-            onChange={(e) => setTrackName(e.target.value)}
-          />
-          <button type="submit" className="save-btn" disabled={!canSave}>
-            💾 Sačuvaj stazu
-          </button>
-        </form>
+          <form className="save-form" onSubmit={handleSaveTrack}>
+            <input
+              type="text"
+              placeholder="Track name (e.g. Sunday loop)"
+              value={trackName}
+              onChange={(e) => setTrackName(e.target.value)}
+            />
+            <button type="submit" className="save-btn" disabled={!canSave}>
+              💾 Save track
+            </button>
+          </form>
 
-        <section className="tracks-list">
-          <h2>Sačuvane staze ({tracks.length})</h2>
-          {tracks.length === 0 && <p className="muted">Još nema sačuvanih staza.</p>}
-          <ul>
-            {tracks.map((t) => (
-              <li key={t.id} className={t.id === activeTrackId ? 'active' : ''}>
-                <button type="button" className="track-item" onClick={() => handleLoadTrack(t)}>
-                  <span className="track-name">{t.name}</span>
-                  <span className="track-meta">{formatDistance(t.distanceMeters)}</span>
-                </button>
-                <button
-                  type="button"
-                  className="delete-btn"
-                  onClick={() => handleDeleteTrack(t.id)}
-                  aria-label={`Obriši ${t.name}`}
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+          <section className="tracks-list">
+            <h2>Saved tracks ({tracks.length})</h2>
+            {tracks.length === 0 && <p className="muted">No tracks saved yet.</p>}
+            <ul>
+              {tracks.map((t) => (
+                <li key={t.id} className={t.id === activeTrackId ? 'active' : ''}>
+                  <button type="button" className="track-item" onClick={() => handleLoadTrack(t)}>
+                    <span className="track-name">{t.name}</span>
+                    <span className="track-meta">{formatDistance(t.distanceMeters)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="delete-btn"
+                    onClick={() => handleDeleteTrack(t.id)}
+                    aria-label={`Delete ${t.name}`}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
       </aside>
 
       <main className="map-pane">
@@ -358,13 +375,13 @@ export default function App() {
           onRemoveWaypoint={handleRemoveWaypoint}
         />
         <div className="map-hint">
-          {recording && '🔴 Snimanje u toku — prati tvoju vožnju uživo'}
-          {!recording && mode === 'a' && 'Klikni na mapu da postaviš start (A)'}
-          {!recording && mode === 'b' && 'Klikni na mapu da postaviš cilj (B)'}
-          {!recording && mode === 'waypoint' && 'Klikni na mapu da dodaš tačku staze'}
-          {!recording && mode === 'idle' && 'Izaberi alat sa leve strane da nastaviš'}
+          {recording && '🔴 Recording — following your ride live'}
+          {!recording && mode === 'a' && 'Tap the map to set the start (A)'}
+          {!recording && mode === 'b' && 'Tap the map to set the finish (B)'}
+          {!recording && mode === 'waypoint' && 'Tap the map to add a route point'}
+          {!recording && mode === 'idle' && 'Pick a tool to continue'}
         </div>
-        <button type="button" className="locate-btn" onClick={handleLocateMe} aria-label="Moja lokacija">
+        <button type="button" className="locate-btn" onClick={handleLocateMe} aria-label="My location">
           📍
         </button>
       </main>
