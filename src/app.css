@@ -29,6 +29,80 @@
   line-height: 1.5;
 }
 
+.record-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.record-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.record-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.record-btn.recording {
+  background: #ef4444;
+  color: white;
+}
+
+.recording-active {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recording-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  font-size: 13px;
+  color: #fca5a5;
+}
+
+.pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.4);
+  }
+}
+
+.location-error {
+  font-size: 12px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
 .toolbar {
   display: flex;
   flex-direction: column;
@@ -57,6 +131,11 @@
 .tool-btn.active {
   border-color: #3b82f6;
   background: rgba(59, 130, 246, 0.15);
+}
+
+.tool-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .status-panel {
@@ -280,6 +359,28 @@
 .mode-b,
 .mode-waypoint {
   cursor: crosshair;
+}
+
+.locate-btn {
+  position: absolute;
+  bottom: 24px;
+  right: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: #ffffff;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.locate-btn:hover {
+  background: #f3f4f6;
 }
 
 .tag-pin {

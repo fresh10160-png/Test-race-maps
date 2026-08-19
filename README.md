@@ -10,6 +10,8 @@ Web aplikacija poput Google Maps-a, namenjena obeležavanju "race" staza: postav
 - Prevlačenje (drag) A/B markera radi finog podešavanja pozicije
 - Automatski izračunata dužina staze
 - Čuvanje staza lokalno (localStorage) sa nazivom, učitavanje i brisanje sačuvanih staza
+- 📍 "Moja lokacija" dugme — centrira mapu na tvoju trenutnu poziciju
+- 🔴 Snimanje vožnje uživo — klikneš "start", GPS prati tvoju vožnju i automatski dodaje tačke staze, klikneš "stop" i A/B/trasa se automatski postave
 
 ## Pokretanje
 
@@ -47,6 +49,15 @@ npm run ios:open
 ```
 
 Otvara `ios/` projekat u Xcode-u. Odatle se pokreće na simulatoru ili povezanom iPhone-u (za instalaciju na pravi uređaj/App Store potreban je Apple Developer nalog).
+
+### Lokacija (GPS)
+
+App koristi [`@capacitor/geolocation`](https://capacitorjs.com/docs/apis/geolocation) za "Moja lokacija" i snimanje vožnje uživo. Dozvole za lokaciju su već dodate:
+
+- Android: `ACCESS_COARSE_LOCATION` / `ACCESS_FINE_LOCATION` u `android/app/src/main/AndroidManifest.xml`
+- iOS: `NSLocationWhenInUseUsageDescription` u `ios/App/App/Info.plist`
+
+Prilikom prvog korišćenja app će zatražiti dozvolu od korisnika.
 
 ### Nakon izmena u web kodu
 

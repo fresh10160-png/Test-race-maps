@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
   MapContainer,
   TileLayer,
   Marker,
   CircleMarker,
   Polyline,
+  useMap,
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
@@ -39,11 +40,29 @@ function MapClicks({ mode, onMapClick }: MapClicksProps) {
   return null
 }
 
+interface FlyToProps {
+  point: LatLngPoint
+  requestId: number
+}
+
+function FlyToLocation({ point, requestId }: FlyToProps) {
+  const map = useMap()
+  useEffect(() => {
+    if (requestId > 0) {
+      map.flyTo([point.lat, point.lng], Math.max(map.getZoom(), 16))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestId])
+  return null
+}
+
 interface MapViewProps {
   mode: EditMode
   a: LatLngPoint | null
   b: LatLngPoint | null
   waypoints: LatLngPoint[]
+  myLocation: LatLngPoint | null
+  flyToRequestId: number
   onMapClick: (p: LatLngPoint) => void
   onMoveA: (p: LatLngPoint) => void
   onMoveB: (p: LatLngPoint) => void
@@ -55,6 +74,8 @@ export default function MapView({
   a,
   b,
   waypoints,
+  myLocation,
+  flyToRequestId,
   onMapClick,
   onMoveA,
   onMoveB,
@@ -79,6 +100,7 @@ export default function MapView({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapClicks mode={mode} onMapClick={onMapClick} />
+      {myLocation && <FlyToLocation point={myLocation} requestId={flyToRequestId} />}
 
       {fullPath.length > 1 && (
         <Polyline
@@ -129,6 +151,20 @@ export default function MapView({
               onMoveB({ lat: ll.lat, lng: ll.lng })
             },
           }}
+        />
+      )}
+
+      {myLocation && (
+        <CircleMarker
+          center={[myLocation.lat, myLocation.lng]}
+          radius={8}
+          pathOptions={{
+            color: '#ffffff',
+            weight: 3,
+            fillColor: '#3b82f6',
+            fillOpacity: 1,
+          }}
+          interactive={false}
         />
       )}
     </MapContainer>
